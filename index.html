@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>薬理学 演習クイズ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap');
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+    }
+    @keyframes comboPop {
+      0% { transform: scale(0.6) rotate(-8deg); opacity: 0; }
+      50% { transform: scale(1.25) rotate(4deg); opacity: 1; }
+      70% { transform: scale(0.95) rotate(-2deg); }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    .animate-combo {
+      animation: comboPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6)); }
+      50% { filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.9)); }
+    }
+    .combo-glow {
+      animation: pulseGlow 1.2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+  <!-- ヘッダー -->
+  <header class="bg-white border-b border-slate-200 py-3.5 px-6 shadow-sm">
+    <div class="max-w-3xl mx-auto flex justify-between items-center gap-3">
+      <div class="flex items-center gap-2.5">
+        <span class="text-2xl">💊</span>
+        <h1 class="text-lg md:text-xl font-bold text-slate-800 tracking-tight">薬理学 徹底演習クイズ</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="user-title-badge-header" class="hidden sm:inline-flex text-xs bg-amber-50 text-amber-800 font-bold px-2.5 py-1 rounded-full border border-amber-200 items-center gap-1">
+          称号: <span id="header-title-text">-</span>
+        </span>
+        <span id="total-count-badge" class="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-1 rounded-full border border-indigo-200">
+          読込中...
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="flex-grow flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-slate-100 p-6 md:p-8 relative overflow-hidden">
+
+      <!-- スタート画面 -->
+      <div id="start-screen" class="text-center space-y-5">
+        <div>
+          <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900 mb-1">薬理学・作用機序クイズ</h2>
+          <p class="text-slate-500 text-xs md:text-sm">医療系学生・国家試験対応 5択演習</p>
+        </div>
+
+        <!-- 称号・習得ステータスパネル -->
+        <div class="bg-gradient-to-br from-amber-50 to-orange-50/60 rounded-xl p-4 border border-amber-200/80 text-left space-y-2.5 shadow-sm">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-amber-900 flex items-center gap-1">
+              <span>🎖️</span> 現在の称号ランク
+            </span>
+            <span id="title-name-display" class="text-xs font-extrabold text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full border border-amber-300">
+              薬理ビギナー
+            </span>
+          </div>
+          <div class="flex justify-between items-end text-xs text-amber-800">
+            <div>
+              全カテゴリ習得済み: <strong id="total-mastered-display" class="text-base text-amber-950 font-black">0</strong> / <span id="total-pool-display">300</span> 問
+            </div>
+            <span id="next-title-hint" class="text-[11px] text-amber-700 font-medium">次の称号まで あと 1問</span>
+          </div>
+          <!-- プログレスバー -->
+          <div class="w-full bg-amber-200/60 h-2 rounded-full overflow-hidden">
+            <div id="title-progress-bar" class="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- 出題ルール -->
+        <div class="bg-indigo-50/60 rounded-xl p-3.5 border border-indigo-100 text-left space-y-1">
+          <p class="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1">
+            出題ルール
+          </p>
+          <ul class="text-xs text-indigo-700 list-disc list-inside space-y-0.5">
+            <li>1回につきランダムで <strong>10問</strong> 出題されます。</li>
+            <li>「習得済みにする」に登録した問題は、<strong>リセットするまで完全に除外</strong>されます。</li>
+          </ul>
+        </div>
+
+        <!-- カテゴリ選択 -->
+        <div class="text-left space-y-1">
+          <label for="cat-select" class="block text-xs font-bold text-slate-600">出題カテゴリの選択</label>
+          <select id="cat-select" onchange="updateStartScreenInfo()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <option value="all">すべてのカテゴリ（全薬効群 ランダム）</option>
+            <option value="循環器系（降圧薬・利尿薬）">循環器系（降圧薬・利尿薬）</option>
+            <option value="循環器系">循環器系（不整脈・抗血栓等）</option>
+            <option value="感染症治療薬（抗菌・抗ウイルス・抗真菌薬）">感染症治療薬（抗菌・抗ウイルス・抗真菌薬）</option>
+            <option value="感染症治療薬">感染症治療薬（抗結核・抗HIV・コロナ薬等）</option>
+            <option value="中枢神経系（向精神薬・抗てんかん薬）">中枢神経系（向精神薬・抗てんかん薬・神経変性）</option>
+            <option value="抗悪性腫瘍薬（分子標的薬・抗体薬等）">抗悪性腫瘍薬（分子標的薬・抗体薬等）</option>
+            <option value="代謝・内分泌系（糖尿病・脂質異常症・痛風治療薬）">代謝・内分泌系（糖尿病・脂質異常症・痛風治療薬）</option>
+            <option value="代謝内分泌">代謝内分泌（甲状腺・新規GLP-1/GIP・骨代謝等）</option>
+            <option value="消化器・呼吸器・疼痛炎症治療薬">消化器・呼吸器・疼痛炎症治療薬</option>
+            <option value="消化器">消化器（便秘治療薬等）</option>
+            <option value="呼吸器">呼吸器（鎮咳・去痰等）</option>
+            <option value="疼痛">疼痛（強オピオイド等）</option>
+            <option value="免疫・炎症">免疫・炎症（JAK阻害・抗IL-6等）</option>
+            <option value="その他の重要薬効群（骨粗鬆症・抗アレルギー・眼科用薬等）">その他（骨粗鬆症・抗アレルギー・眼科・免疫抑制等）</option>
+          </select>
+        </div>
+
+        <!-- スコア・除外情報 -->
+        <div class="flex justify-between items-center bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs text-slate-600">
+          <span id="high-score-display" class="font-bold">ベスト: -</span>
+          <span id="excluded-count-display" class="font-medium text-slate-500">このカテゴリの習得済み: 0問</span>
+        </div>
+
+        <!-- 開始ボタン -->
+        <div class="space-y-2.5">
+          <button onclick="startQuiz()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-md transition duration-200 text-base">
+            クイズを開始する
+          </button>
+          <button onclick="resetExcludedQuestions()" class="w-full bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 font-semibold py-2 px-4 rounded-xl text-xs transition">
+            🔄 このカテゴリの習得済み履歴をリセット（全問復活）
+          </button>
+        </div>
+      </div>
+
+      <!-- クイズ画面 -->
+      <div id="quiz-screen" class="hidden space-y-5">
+        <div class="flex justify-between items-center text-xs font-bold text-slate-400 border-b border-slate-100 pb-3">
+          <span id="quiz-category" class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded">カテゴリ</span>
+          <div class="flex items-center gap-3">
+            <!-- コンボ表示バッジ -->
+            <div id="combo-badge-container" class="hidden">
+              <span id="combo-badge" class="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white font-black px-2.5 py-0.5 rounded-full text-xs shadow-md combo-glow">
+                🔥 <span id="combo-count-text">2</span> COMBO!
+              </span>
+            </div>
+            <span id="quiz-progress">問 1 / 10</span>
+          </div>
+        </div>
+
+        <!-- 画面中央のポップアップコンボ通知エリア（アニメーション用） -->
+        <div id="combo-popup" class="hidden pointer-events-none text-center py-1">
+          <span id="combo-popup-text" class="inline-block text-xl md:text-2xl font-black italic tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 drop-shadow animate-combo">
+            🔥 2 COMBO!!
+          </span>
+        </div>
+
+        <div>
+          <h3 id="question-text" class="text-lg md:text-xl font-bold text-slate-900 leading-relaxed min-h-[3.5rem]">
+            問題文
+          </h3>
+        </div>
+
+        <div id="options-container" class="space-y-2.5"></div>
+
+        <!-- 回答後の解説エリア -->
+        <div id="explanation-container" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-200 space-y-3">
+          <div id="answer-status" class="font-bold text-base"></div>
+          <p id="explanation-text" class="text-xs md:text-sm text-slate-600 leading-relaxed"></p>
+
+          <div class="pt-2 border-t border-slate-200 flex flex-col gap-2">
+            <button id="exclude-btn" onclick="toggleExcludeCurrentQuestion()" class="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition">
+              <span>🚫 この問題を習得済みにする（リセットまで次回以降出さない）</span>
+            </button>
+            <button type="button" onclick="searchDrugDetails()" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition">
+              <span>🔍 Googleでこの薬を詳しく調べる（作用機序・副作用）</span>
+            </button>
+            <button id="next-btn" onclick="nextQuestion()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition">
+              次の問題へ
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 結果画面 -->
+      <div id="result-screen" class="hidden text-center space-y-5">
+        <div class="space-y-2">
+          <div id="result-badge" class="inline-block p-3 rounded-full bg-yellow-100 text-3xl">🏆</div>
+          <h2 class="text-2xl font-bold text-slate-900">演習完了！</h2>
+          <p id="result-message" class="text-sm text-slate-500"></p>
+        </div>
+
+        <!-- スコア・コンボカード -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col justify-center">
+            <div class="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">今回のスコア</div>
+            <div class="text-4xl font-black text-indigo-600"><span id="final-score">0</span> <span class="text-xs text-slate-400 font-normal">/ 10</span></div>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col justify-center">
+            <div class="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">最大コンボ数</div>
+            <div class="text-4xl font-black text-orange-500"><span id="max-combo-score">0</span> <span class="text-xs text-slate-400 font-normal">COMBO</span></div>
+          </div>
+        </div>
+
+        <!-- 称号情報表示 -->
+        <div class="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+          <div class="font-bold">現在のあなたの称号</div>
+          <div id="result-title-display" class="text-base font-extrabold text-amber-950">薬理ビギナー 🌱</div>
+          <div id="result-title-progress" class="text-[11px] text-amber-700">全カテゴリの習得数: 0 / 300 問</div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button onclick="startQuiz()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition">
+            もう一度解く
+          </button>
+          <button onclick="backToTop()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-4 rounded-xl text-sm transition">
+            トップに戻る
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="py-4 text-center text-xs text-slate-400">
+    &copy; 薬理学演習アプリ - Generated with Gemini API
+  </footer>
+
+  <script>
+    let allQuizData = [];
+
+    const QUESTION_COUNT = 10;
+    let currentQuestions = [];
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let isAnswered = false;
+
+    // コンボ管理
+    let currentCombo = 0;
+    let maxCombo = 0;
+
+    // 称号定義テーブル (習得問題数に応じた称号)
+    const TITLE_RANKS = [
+      { min: 300, title: "神薬の覇者（全問完全制覇）", icon: "👑" },
+      { min: 250, title: "伝説の薬理学者", icon: "🌟" },
+      { min: 200, title: "薬理学の賢者", icon: "🎓" },
+      { min: 150, title: "作用機序の達人", icon: "🏆" },
+      { min: 100, title: "薬理スペシャリスト", icon: "⚡" },
+      { min: 60,  title: "薬効マスター候補", icon: "💊" },
+      { min: 30,  title: "作用機序の探究者", icon: "🔍" },
+      { min: 1,   title: "見習い薬理士", icon: "📖" },
+      { min: 0,   title: "薬理ビギナー", icon: "🌱" }
+    ];
+
+    function calculateTitle(masteredCount) {
+      for (const rank of TITLE_RANKS) {
+        if (masteredCount >= rank.min) {
+          return rank;
+        }
+      }
+      return TITLE_RANKS[TITLE_RANKS.length - 1];
+    }
+
+    function getNextTitleInfo(masteredCount) {
+      for (let i = TITLE_RANKS.length - 1; i >= 0; i--) {
+        if (TITLE_RANKS[i].min > masteredCount) {
+          return {
+            needed: TITLE_RANKS[i].min - masteredCount,
+            nextTitle: TITLE_RANKS[i].title,
+            targetMin: TITLE_RANKS[i].min
+          };
+        }
+      }
+      return null; // 全問達成
+    }
+
+    function searchDrugDetails() {
+      const q = currentQuestions[currentQuestionIndex];
+      let drugName = "";
+
+      // 解説文の先頭「〇〇は」からターゲット薬剤名を抽出
+      const expMatch = q.explanation.match(/^【?([^、。は\s【】]+)】?は/);
+      if (expMatch) {
+        drugName = expMatch[1];
+      } else {
+        drugName = q.options[q.answerIndex];
+      }
+
+      drugName = drugName.replace(/(ナトリウム|塩酸塩|フマル酸塩|マレイン酸塩|カリウム|水和物).*$/, '');
+      const query = `${drugName} 作用機序 副作用 薬理学`;
+      const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      window.open(targetUrl, '_blank');
+    }
+
+    function shuffleArray(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function getExcludedStorageKey() {
+      return 'quiz_permanently_excluded_ids';
+    }
+
+    function getExcludedIds() {
+      const key = getExcludedStorageKey();
+      return JSON.parse(localStorage.getItem(key) || '[]');
+    }
+
+    function saveExcludedIds(ids) {
+      const key = getExcludedStorageKey();
+      localStorage.setItem(key, JSON.stringify(ids));
+    }
+
+    async function loadQuizData() {
+      try {
+        const response = await fetch('questions.json');
+        if (!response.ok) throw new Error('Network response was not ok');
+        allQuizData = await response.json();
+        document.getElementById('total-count-badge').innerText = `全 ${allQuizData.length} 問収録`;
+        document.getElementById('total-pool-display').innerText = allQuizData.length;
+        updateStartScreenInfo();
+      } catch (error) {
+        console.error('Failed to load questions.json:', error);
+        document.getElementById('total-count-badge').innerText = '読込エラー';
+      }
+    }
+
+    window.onload = () => {
+      loadQuizData();
+    };
+
+    function updateStartScreenInfo() {
+      const selectedCat = document.getElementById('cat-select').value;
+      const scoreKey = `quizHighScore_${selectedCat}`;
+      const highScore = localStorage.getItem(scoreKey) || 0;
+      document.getElementById('high-score-display').innerText = `ベスト: ${highScore} / ${QUESTION_COUNT} 点`;
+
+      const excludedIds = getExcludedIds();
+
+      // 全体習得数と称号の更新
+      const totalMastered = excludedIds.length;
+      document.getElementById('total-mastered-display').innerText = totalMastered;
+      const rank = calculateTitle(totalMastered);
+      document.getElementById('title-name-display').innerText = `${rank.icon} ${rank.title}`;
+      document.getElementById('header-title-text').innerText = `${rank.icon} ${rank.title}`;
+
+      // プログレスバーと次称号ヒント
+      const nextInfo = getNextTitleInfo(totalMastered);
+      const progressBar = document.getElementById('title-progress-bar');
+      const hintText = document.getElementById('next-title-hint');
+      if (nextInfo) {
+        hintText.innerText = `次「${nextInfo.nextTitle}」まで あと ${nextInfo.needed} 問`;
+        const percentage = Math.min(100, Math.round((totalMastered / nextInfo.targetMin) * 100));
+        progressBar.style.width = `${percentage}%`;
+      } else {
+        hintText.innerText = `最高位称号に到達！マスター完了です！`;
+        progressBar.style.width = '100%';
+      }
+
+      // カテゴリ別
+      let pool = allQuizData;
+      if (selectedCat !== 'all') {
+        pool = allQuizData.filter(q => q.category === selectedCat);
+      }
+      const excludedInCat = pool.filter(q => excludedIds.includes(q.id)).length;
+      document.getElementById('excluded-count-display').innerText = `このカテゴリの習得済み: ${excludedInCat} / ${pool.length} 問`;
+    }
+
+    function resetExcludedQuestions() {
+      const selectedCat = document.getElementById('cat-select').value;
+      if (!confirm('除外（習得済み）設定をリセットし、すべての問題を出題対象に戻しますか？')) {
+        return;
+      }
+
+      let excludedIds = getExcludedIds();
+      if (selectedCat === 'all') {
+        localStorage.removeItem(getExcludedStorageKey());
+      } else {
+        const poolIds = allQuizData.filter(q => q.category === selectedCat).map(q => q.id);
+        excludedIds = excludedIds.filter(id => !poolIds.includes(id));
+        saveExcludedIds(excludedIds);
+      }
+      updateStartScreenInfo();
+      alert('リセットが完了しました。すべての問題が再び出題されます。');
+    }
+
+    function startQuiz() {
+      const selectedCat = document.getElementById('cat-select').value;
+      let pool = allQuizData;
+      if (selectedCat !== 'all') {
+        pool = allQuizData.filter(q => q.category === selectedCat);
+      }
+
+      const excludedIds = getExcludedIds();
+      let availablePool = pool.filter(q => !excludedIds.includes(q.id));
+
+      if (availablePool.length === 0) {
+        alert('このカテゴリのすべての問題を習得済み（除外）に設定しています！\n「習得済み履歴をリセット」を押して再挑戦してください。');
+        return;
+      }
+
+      const count = Math.min(QUESTION_COUNT, availablePool.length);
+      currentQuestions = shuffleArray(availablePool).slice(0, count);
+
+      currentQuestionIndex = 0;
+      score = 0;
+      currentCombo = 0;
+      maxCombo = 0;
+
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('result-screen').classList.add('hidden');
+      document.getElementById('quiz-screen').classList.remove('hidden');
+
+      showQuestion();
+    }
+
+    let currentShuffledOptions = [];
+
+    function showQuestion() {
+      isAnswered = false;
+      const q = currentQuestions[currentQuestionIndex];
+
+      document.getElementById('quiz-category').innerText = q.category;
+      document.getElementById('quiz-progress').innerText = `問 ${currentQuestionIndex + 1} / ${currentQuestions.length}`;
+      document.getElementById('question-text').innerText = q.question;
+
+      // コンボバッジの更新
+      updateComboDisplay();
+
+      const excludeBtn = document.getElementById('exclude-btn');
+      const excludedIds = getExcludedIds();
+      if (excludedIds.includes(q.id)) {
+        excludeBtn.className = "w-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition";
+        excludeBtn.innerHTML = '<span>✅ 習得済み（次回から出題されません - クリックで解除）</span>';
+      } else {
+        excludeBtn.className = "w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition";
+        excludeBtn.innerHTML = '<span>🚫 この問題を習得済みにする（リセットまで次回以降出さない）</span>';
+      }
+
+      const container = document.getElementById('options-container');
+      container.innerHTML = '';
+
+      // 選択肢をシャッフル（元のインデックスを保持）
+      const mappedOptions = q.options.map((opt, originalIdx) => ({
+        text: opt,
+        originalIndex: originalIdx
+      }));
+      currentShuffledOptions = shuffleArray(mappedOptions);
+
+      currentShuffledOptions.forEach((item, displayIdx) => {
+        const btn = document.createElement('button');
+        btn.className = "w-full text-left p-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition text-sm font-medium text-slate-700 flex items-start gap-3";
+        btn.innerHTML = `<span class="inline-block w-5 text-slate-400 font-bold">${displayIdx + 1}.</span> <span>${item.text}</span>`;
+        btn.onclick = () => selectAnswer(item.originalIndex, displayIdx);
+        container.appendChild(btn);
+      });
+
+      document.getElementById('explanation-container').classList.add('hidden');
+      document.getElementById('combo-popup').classList.add('hidden');
+    }
+
+    function updateComboDisplay() {
+      const comboBadgeContainer = document.getElementById('combo-badge-container');
+      const comboCountText = document.getElementById('combo-count-text');
+      if (currentCombo >= 2) {
+        comboBadgeContainer.classList.remove('hidden');
+        comboCountText.innerText = currentCombo;
+      } else {
+        comboBadgeContainer.classList.add('hidden');
+      }
+    }
+
+    function triggerComboPopup(combo) {
+      const popup = document.getElementById('combo-popup');
+      const popupText = document.getElementById('combo-popup-text');
+      popupText.innerText = `🔥 ${combo} COMBO! 🔥`;
+      popup.classList.remove('hidden');
+
+      // 5コンボ以上はミニ紙吹雪
+      if (combo >= 5) {
+        confetti({
+          particleCount: 25,
+          spread: 60,
+          origin: { y: 0.4 },
+          scalar: 0.8
+        });
+      }
+    }
+
+    function toggleExcludeCurrentQuestion() {
+      const q = currentQuestions[currentQuestionIndex];
+      let excludedIds = getExcludedIds();
+      const excludeBtn = document.getElementById('exclude-btn');
+
+      if (excludedIds.includes(q.id)) {
+        excludedIds = excludedIds.filter(id => id !== q.id);
+        saveExcludedIds(excludedIds);
+        excludeBtn.className = "w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition";
+        excludeBtn.innerHTML = '<span>🚫 この問題を習得済みにする（リセットまで次回以降出さない）</span>';
+      } else {
+        excludedIds.push(q.id);
+        saveExcludedIds(excludedIds);
+        excludeBtn.className = "w-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition";
+        excludeBtn.innerHTML = '<span>✅ 習得済み（次回から出題されません - クリックで解除）</span>';
+      }
+      updateStartScreenInfo();
+    }
+
+    function selectAnswer(selectedOriginalIdx, selectedDisplayIdx) {
+      if (isAnswered) return;
+      isAnswered = true;
+
+      const q = currentQuestions[currentQuestionIndex];
+      const buttons = document.getElementById('options-container').querySelectorAll('button');
+      const isCorrect = (selectedOriginalIdx === q.answerIndex);
+
+      buttons.forEach((btn, displayIdx) => {
+        btn.disabled = true;
+        const optOriginalIdx = currentShuffledOptions[displayIdx].originalIndex;
+
+        if (optOriginalIdx === q.answerIndex) {
+          btn.className = "w-full text-left p-3.5 rounded-xl border border-emerald-500 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-start gap-3";
+        } else if (displayIdx === selectedDisplayIdx) {
+          btn.className = "w-full text-left p-3.5 rounded-xl border border-rose-400 bg-rose-50 text-rose-800 text-sm flex items-start gap-3";
+        } else {
+          btn.className = "w-full text-left p-3.5 rounded-xl border border-slate-100 bg-slate-50 text-slate-400 text-sm flex items-start gap-3";
+        }
+      });
+
+      const status = document.getElementById('answer-status');
+      if (isCorrect) {
+        score++;
+        currentCombo++;
+        if (currentCombo > maxCombo) {
+          maxCombo = currentCombo;
+        }
+
+        if (currentCombo >= 2) {
+          status.innerHTML = `<span class="text-emerald-600">◎ 正解！</span> <span class="ml-2 text-xs font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">${currentCombo} COMBO達成！</span>`;
+          triggerComboPopup(currentCombo);
+        } else {
+          status.innerHTML = '<span class="text-emerald-600">◎ 正解！</span>';
+        }
+      } else {
+        if (currentCombo >= 2) {
+          status.innerHTML = `<span class="text-rose-600">✕ 不正解...</span> <span class="text-xs text-slate-500 font-normal">（正解: ${q.options[q.answerIndex]}）</span> <span class="ml-1 text-xs text-rose-500 font-bold">(${currentCombo}コンボでストップ)</span>`;
+        } else {
+          status.innerHTML = `<span class="text-rose-600">✕ 不正解...</span> <span class="text-xs text-slate-500 font-normal">（正解: ${q.options[q.answerIndex]}）</span>`;
+        }
+        currentCombo = 0;
+      }
+
+      updateComboDisplay();
+      document.getElementById('explanation-text').innerText = q.explanation;
+      document.getElementById('explanation-container').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+      currentQuestionIndex++;
+      if (currentQuestionIndex < currentQuestions.length) {
+        showQuestion();
+      } else {
+        showResult();
+      }
+    }
+
+    function showResult() {
+      document.getElementById('quiz-screen').classList.add('hidden');
+      document.getElementById('result-screen').classList.remove('hidden');
+
+      document.getElementById('final-score').innerText = score;
+      document.getElementById('max-combo-score').innerText = maxCombo;
+
+      // 称号表示の反映
+      const excludedIds = getExcludedIds();
+      const rank = calculateTitle(excludedIds.length);
+      document.getElementById('result-title-display').innerText = `${rank.icon} ${rank.title}`;
+      document.getElementById('result-title-progress').innerText = `全問中の習得数: ${excludedIds.length} / ${allQuizData.length} 問`;
+
+      const selectedCat = document.getElementById('cat-select').value;
+      const scoreKey = `quizHighScore_${selectedCat}`;
+      const currentHigh = parseInt(localStorage.getItem(scoreKey) || '0', 10);
+      if (score > currentHigh) {
+        localStorage.setItem(scoreKey, score);
+      }
+
+      const badge = document.getElementById('result-badge');
+      const msg = document.getElementById('result-message');
+
+      if (score === currentQuestions.length && score >= 10) {
+        badge.innerText = '🎉';
+        msg.innerText = '全問正解パーフェクト！完全にマスターできています！';
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      } else if (score >= 7) {
+        badge.innerText = '✨';
+        msg.innerText = '合格圏内です！高コンボを狙って復習しましょう。';
+      } else {
+        badge.innerText = '📚';
+        msg.innerText = '間違えた問題をしっかり復習して再挑戦しましょう！';
+      }
+    }
+
+    function backToTop() {
+      updateStartScreenInfo();
+      document.getElementById('result-screen').classList.add('hidden');
+      document.getElementById('start-screen').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
